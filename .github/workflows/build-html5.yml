@@ -31,7 +31,7 @@ jobs:
       - name: Set up Haxe
         uses: krdlab/setup-haxe@v2
         with:
-          haxe-version: 4.2.5
+          haxe-version: 4.3.2
 
       - name: Install browser build tools
         run: |
@@ -43,34 +43,28 @@ jobs:
       - name: Install Psych Engine 0.7.3 libraries
         run: |
           set -euo pipefail
-          # Keep the core HaxeFlixel stack aligned with the known 0.7.x builds.
-          haxelib install lime 8.0.1 --always
-          haxelib install openfl 9.2.1 --always
-          haxelib install flixel 5.3.0 --always
-          haxelib install flixel-addons 3.2.0 --always
+          # Match the Psych Engine source's required Flixel APIs.
+          haxelib install lime 8.1.2 --always
+          haxelib install openfl 9.3.3 --always
+          haxelib install flixel 5.6.1 --always
+          haxelib install flixel-addons 3.2.2 --always
           haxelib install flixel-ui 2.5.0 --always
-          haxelib install flixel-tools
-          haxelib install tjson
+          haxelib install flixel-tools 1.5.1 --always
+          haxelib install tjson 1.4.0 --always
           haxelib git flxanimate https://github.com/ShadowMario/flxanimate dev
 
       - name: Verify Psych Engine HaxeFlixel APIs
         run: |
-                    # Fail early if Haxelib resolved the older APIs that caused missing-type errors.
-                    FLIXEL_PATH="$(haxelib path flixel | head -n 1)"
-                    ADDONS_PATH="$(haxelib path flixel-addons | head -n 1)"
-                    test -f "$FLIXEL_PATH/flixel/sound/FlxSound.hx" || {
-                      echo "flixel.sound.FlxSound is missing; expected HaxeFlixel 5.3.0." >&2
-                      haxelib list
-                      exit 1
-                    }
-                    test -f "$ADDONS_PATH/flixel/addons/display/FlxRuntimeShader.hx" || {
-                      echo "FlxRuntimeShader is missing; expected flixel-addons 3.2.0." >&2
-                      haxelib list
-                      exit 1
-                    }
-                    haxelib list
-          
-          
+          set -euo pipefail
+          FLIXEL_PATH="$(haxelib path flixel | head -n 1)"
+          ADDONS_PATH="$(haxelib path flixel-addons | head -n 1)"
+          test -f "$FLIXEL_PATH/flixel/sound/FlxSound.hx"
+          test -f "$ADDONS_PATH/flixel/addons/display/FlxRuntimeShader.hx"
+          grep -q "animationTimeScale" "$FLIXEL_PATH/flixel/FlxG.hx"
+          grep -q "public var timeScale" "$FLIXEL_PATH/flixel/animation/FlxAnimationController.hx"
+          grep -q "public var filters" "$FLIXEL_PATH/flixel/FlxCamera.hx"
+          haxelib list
+
       - name: Download the supplied mod archive from this repository's release
         env:
           GH_TOKEN: ${{ github.token }}
