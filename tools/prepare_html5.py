@@ -492,25 +492,24 @@ def patch_html5_engine_source(engine: Path) -> None:
     """Guard desktop-only source operations and fix APIs used by this build."""
     editor_file = engine / "source" / "states" / "editors" / "CharacterEditorState.hx"
     editor_source = editor_file.read_text(encoding="utf-8")
-    editor_marker = "\t\t#if sys\n\t\tvar foldersToCheck:Array<String> = Mods.directoriesWithFile"
-    if "var foldersToCheck:Array<String> = Mods.directoriesWithFile" in editor_source and editor_marker not in editor_source:
-        old = "\t\tvar foldersToCheck:Array<String> = Mods.directoriesWithFile(Paths.getSharedPath(), 'characters/');"
-        if editor_source.count(old) != 1:
-            raise RuntimeError("Cannot locate CharacterEditorState character-folder scan.")
-        editor_source = editor_source.replace(
-            old,
-            "#if sys\n" + old,
-            1,
-        )
-        end = "\t\t\t}\n\n\t\tif(characterList.length < 1)"
+    scan_line = "\t\tvar foldersToCheck:Array<String> = Mods.directoriesWithFile(Paths.getSharedPath(), 'characters/');"
+    if scan_line in editor_source:
+        if "#if sys\n" + scan_line in editor_source:
+            raise RuntimeError("CharacterEditorState folder scan has an unexpected partial HTML5 guard.")
+        if editor_source.count(scan_line) != 1:
+            raise RuntimeError("Cannot locate a unique CharacterEditorState character-folder scan.")
+        editor_source = editor_source.replace(scan_line, "\t\t#if sys\n" + scan_line, 1)
+        end = "\t\t\t\t}\n\n\t\tif(characterList.length < 1)"
         if editor_source.count(end) != 1:
             raise RuntimeError("Cannot locate end of CharacterEditorState character-folder scan.")
         editor_source = editor_source.replace(
             end,
-            "\t\t\t}\n\t\t#end\n\n\t\tif(characterList.length < 1)",
+            "\t\t\t\t}\n\t\t#end\n\n\t\tif(characterList.length < 1)",
             1,
         )
         editor_file.write_text(editor_source, encoding="utf-8")
+    elif "#if sys\n\t\tvar foldersToCheck:Array<String>" not in editor_source:
+        raise RuntimeError("CharacterEditorState folder scan is missing or was unexpectedly changed.")
 
     cool_file = engine / "source" / "backend" / "CoolUtil.hx"
     cool_source = cool_file.read_text(encoding="utf-8")
