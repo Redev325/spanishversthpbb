@@ -390,6 +390,85 @@ class DiscordClient
         discord_file.write_text(stub + original.rstrip() + chr(10) + "#end" + chr(10), encoding="utf-8")
 
 
+def patch_html5_animate_io(engine: Path) -> None:
+    """Use embedded OpenFL text assets instead of desktop filesystem reads on JS."""
+    paths_file = engine / "source" / "backend" / "Paths.hx"
+    paths_source = paths_file.read_text(encoding="utf-8")
+    paths_marker = "OpenFlAssets.getText(Std.string(spriteJson))"
+    if paths_marker not in paths_source:
+        sprite_old = "spriteJson = File.getContent(spriteJson);"
+        animation_old = "animationJson = File.getContent(animationJson);"
+        if paths_source.count(sprite_old) != 1 or paths_source.count(animation_old) != 1:
+            raise RuntimeError("Cannot locate both FlxAnimate JSON reads in backend/Paths.hx.")
+        paths_source = paths_source.replace(
+            sprite_old,
+            """#if sys
+\t\t\tspriteJson = File.getContent(spriteJson);
+\t\t#else
+\t\t\tspriteJson = OpenFlAssets.getText(Std.string(spriteJson));
+\t\t#end""",
+            1,
+        )
+        paths_source = paths_source.replace(
+            animation_old,
+            """#if sys
+\t\t\tanimationJson = File.getContent(animationJson);
+\t\t#else
+\t\t\tanimationJson = OpenFlAssets.getText(Std.string(animationJson));
+\t\t#end""",
+            1,
+        )
+        paths_file.write_text(paths_source, encoding="utf-8")
+
+    # Patch the exact FlxAnimate dependency selected by Haxelib. The dev
+    # branch already handles HTML5 for ZIP and atlas-folder reads, but its
+    # loadAtlasEx JSON/XML branches still call sys.io.File unconditionally.
+    haxelib_path = subprocess.run(
+        ["haxelib", "path", "flxanimate"],
+        check=True,
+        text=True,
+        capture_output=True,
+    ).stdout
+    library_root = None
+    for raw_line in haxelib_path.splitlines():
+        candidate_text = raw_line.strip()
+        if candidate_text.startswith("-cp "):
+            candidate_text = candidate_text[4:].strip()
+        if candidate_text and not candidate_text.startswith("-"):
+            candidate = Path(candidate_text)
+            if candidate.is_dir():
+                library_root = candidate
+                break
+    if library_root is None:
+        raise RuntimeError("Could not resolve the installed flxanimate Haxelib source path.")
+
+    animate_file = library_root / "flxanimate" / "FlxAnimate.hx"
+    if not animate_file.is_file():
+        raise FileNotFoundError(f"FlxAnimate source file is missing: {animate_file}")
+    animate_source = animate_file.read_text(encoding="utf-8")
+    if "Assets.getText(Std.string(myJson))" not in animate_source:
+        old_json = "if(trimmed == '.json') myJson = sys.io.File.getContent(myJson); //is a path"
+        new_json = """if(trimmed == '.json') //is a path
+\t\t\t{
+\t\t\t\t#if sys
+\t\t\t\tmyJson = sys.io.File.getContent(myJson);
+\t\t\t\t#else
+\t\t\t\tmyJson = Assets.getText(Std.string(myJson));
+\t\t\t\t#end
+\t\t\t}"""
+        old_data = "myData = sys.io.File.getContent(pathOrStr);"
+        new_data = """#if sys
+\t\t\tmyData = sys.io.File.getContent(pathOrStr);
+\t\t\t#else
+\t\t\tmyData = Assets.getText(pathOrStr);
+\t\t\t#end"""
+        if animate_source.count(old_json) != 1 or animate_source.count(old_data) != 2:
+            raise RuntimeError("Unexpected FlxAnimate loadAtlasEx file-I/O source; refusing an unsafe patch.")
+        animate_source = animate_source.replace(old_json, new_json, 1)
+        animate_source = animate_source.replace(old_data, new_data)
+        animate_file.write_text(animate_source, encoding="utf-8")
+
+
 def patch_note_types(engine: Path) -> None:
     note_file = engine / "source" / "objects" / "Note.hx"
     source = note_file.read_text(encoding="utf-8")
@@ -463,6 +542,7 @@ def prepare(engine: Path, mod: Path) -> dict[str, object]:
     chart_file.write_text(json.dumps(chart_data, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
 
     patch_html5_platform_features(engine)
+    patch_html5_animate_io(engine)
     patch_note_types(engine)
     patch_stage_registration(engine)
     stage_file = engine / "source" / "states" / "stages" / "South.hx"
