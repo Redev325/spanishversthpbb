@@ -493,12 +493,11 @@ def patch_html5_engine_source(engine: Path) -> None:
     editor_file = engine / "source" / "states" / "editors" / "CharacterEditorState.hx"
     editor_source = editor_file.read_text(encoding="utf-8")
     scan_line = "\t\tvar foldersToCheck:Array<String> = Mods.directoriesWithFile(Paths.getSharedPath(), 'characters/');"
-    if scan_line in editor_source:
-        if "#if sys\n" + scan_line in editor_source:
-            raise RuntimeError("CharacterEditorState folder scan has an unexpected partial HTML5 guard.")
+    guarded_scan_line = "\t\t#if sys\n" + scan_line
+    if scan_line in editor_source and guarded_scan_line not in editor_source:
         if editor_source.count(scan_line) != 1:
             raise RuntimeError("Cannot locate a unique CharacterEditorState character-folder scan.")
-        editor_source = editor_source.replace(scan_line, "\t\t#if sys\n" + scan_line, 1)
+        editor_source = editor_source.replace(scan_line, guarded_scan_line, 1)
         end = "\t\t\t\t}\n\n\t\tif(characterList.length < 1)"
         if editor_source.count(end) != 1:
             raise RuntimeError("Cannot locate end of CharacterEditorState character-folder scan.")
@@ -508,7 +507,7 @@ def patch_html5_engine_source(engine: Path) -> None:
             1,
         )
         editor_file.write_text(editor_source, encoding="utf-8")
-    elif "#if sys\n\t\tvar foldersToCheck:Array<String>" not in editor_source:
+    elif guarded_scan_line not in editor_source:
         raise RuntimeError("CharacterEditorState folder scan is missing or was unexpectedly changed.")
 
     cool_file = engine / "source" / "backend" / "CoolUtil.hx"
