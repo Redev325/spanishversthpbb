@@ -158,9 +158,9 @@ class South extends BaseStage
         if (camFollow == null || PlayState.SONG == null || PlayState.SONG.notes == null
             || curSection < 0 || curSection >= PlayState.SONG.notes.length) return;
         if (PlayState.SONG.notes[curSection].mustHitSection)
-            camFollow.set(cameraBfX, cameraBfY);
+            camFollow.setPosition(cameraBfX, cameraBfY);
         else
-            camFollow.set(cameraDadX, cameraDadY);
+            camFollow.setPosition(cameraDadX, cameraDadY);
     }
 
     function fadeSprite(tag:String, target:Float, duration:Float):Void
@@ -469,6 +469,66 @@ def patch_html5_animate_io(engine: Path) -> None:
         animate_file.write_text(animate_source, encoding="utf-8")
 
 
+    renderer_file = library_root / "flxanimate" / "display" / "FlxAnimateFilterRenderer.hx"
+    if not renderer_file.is_file():
+        raise FileNotFoundError(f"FlxAnimate filter renderer is missing: {renderer_file}")
+    renderer_source = renderer_file.read_text(encoding="utf-8")
+    import_marker = "import lime.graphics.cairo.Cairo;"
+    import_line = "import lime._internal.graphics.ImageCanvasUtil;"
+    if import_line not in renderer_source:
+        if renderer_source.count(import_marker) != 1:
+            raise RuntimeError("Cannot locate the Lime Cairo import in FlxAnimateFilterRenderer.hx.")
+        renderer_source = renderer_source.replace(import_marker, import_line + "\n" + import_marker, 1)
+    access_line = "@:access(lime.graphics.ImageBuffer)"
+    class_marker = "class FlxAnimateFilterRenderer"
+    if access_line not in renderer_source:
+        if renderer_source.count(class_marker) != 1:
+            raise RuntimeError("Cannot locate FlxAnimateFilterRenderer class declaration.")
+        renderer_source = renderer_source.replace(class_marker, access_line + "\n" + class_marker, 1)
+    renderer_file.write_text(renderer_source, encoding="utf-8")
+
+
+def patch_html5_engine_source(engine: Path) -> None:
+    """Guard desktop-only source operations and fix APIs used by this build."""
+    editor_file = engine / "source" / "states" / "editors" / "CharacterEditorState.hx"
+    editor_source = editor_file.read_text(encoding="utf-8")
+    editor_marker = "\t\t#if sys\n\t\tvar foldersToCheck:Array<String> = Mods.directoriesWithFile"
+    if "var foldersToCheck:Array<String> = Mods.directoriesWithFile" in editor_source and editor_marker not in editor_source:
+        old = "\t\tvar foldersToCheck:Array<String> = Mods.directoriesWithFile(Paths.getSharedPath(), 'characters/');"
+        if editor_source.count(old) != 1:
+            raise RuntimeError("Cannot locate CharacterEditorState character-folder scan.")
+        editor_source = editor_source.replace(
+            old,
+            "#if sys\n" + old,
+            1,
+        )
+        end = "\t\t\t}\n\n\t\tif(characterList.length < 1)"
+        if editor_source.count(end) != 1:
+            raise RuntimeError("Cannot locate end of CharacterEditorState character-folder scan.")
+        editor_source = editor_source.replace(
+            end,
+            "\t\t\t}\n\t\t#end\n\n\t\tif(characterList.length < 1)",
+            1,
+        )
+        editor_file.write_text(editor_source, encoding="utf-8")
+
+    cool_file = engine / "source" / "backend" / "CoolUtil.hx"
+    cool_source = cool_file.read_text(encoding="utf-8")
+    if "FlxG.error(" in cool_source:
+        cool_source = cool_source.replace("FlxG.error(", "FlxG.log.error(")
+        cool_file.write_text(cool_source, encoding="utf-8")
+
+    # Make the in-repo Options class explicit. This prevents global imports
+    # from resolving Option to an unrelated UI class with a defaultSelected
+    # boolean constructor parameter.
+    for filename in ("GraphicsSettingsSubState.hx", "VisualsUISubState.hx", "GameplaySettingsSubState.hx"):
+        option_file = engine / "source" / "options" / filename
+        option_source = option_file.read_text(encoding="utf-8")
+        option_source = option_source.replace("var option:Option =", "var option:options.Option =")
+        option_source = option_source.replace("new Option(", "new options.Option(")
+        option_file.write_text(option_source, encoding="utf-8")
+
+
 def patch_note_types(engine: Path) -> None:
     note_file = engine / "source" / "objects" / "Note.hx"
     source = note_file.read_text(encoding="utf-8")
@@ -543,6 +603,7 @@ def prepare(engine: Path, mod: Path) -> dict[str, object]:
 
     patch_html5_platform_features(engine)
     patch_html5_animate_io(engine)
+    patch_html5_engine_source(engine)
     patch_note_types(engine)
     patch_stage_registration(engine)
     stage_file = engine / "source" / "states" / "stages" / "South.hx"
