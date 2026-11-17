@@ -34,8 +34,10 @@ The build workflow must not be described as a fully faithful release until the d
 The preparation step changes Psych Engine's unconditional `DISCORD_ALLOWED` define to a desktop-only define and wraps `backend/Discord.hx` with a no-op HTML5 implementation. The upstream file imports C++ pointer APIs and creates a desktop thread, so it cannot be compiled into the JavaScript target. The web workflow therefore does not install `hxdiscord_rpc`.
 
 
-## Compile error fix: HaxeFlixel versions
+## Compile dependency versions and HTML5 file access
 
-Psych Engine 0.7.3 imports `flixel.sound.FlxSound` and `flixel.addons.display.FlxRuntimeShader`. The former was moved into the `flixel.sound` package in HaxeFlixel 5.3.0; the latter was introduced in `flixel-addons` 3.2.0. The former workflow pins (5.2.2 and 3.0.2) were too old, producing the missing-type errors before the game source could compile.
+The initial library pins fixed the missing `FlxSound` and `FlxRuntimeShader` classes, but HaxeFlixel 5.3.0 is still too old for other APIs used by this Psych Engine source revision. The engine uses `FlxCamera.filters`, `FlxAnimationController.timeScale`, and `FlxG.animationTimeScale`; the latter was added in HaxeFlixel 5.5.0. Its animation helpers also pass a floating-point frame rate to `addByPrefix`, which is supported by HaxeFlixel 5.6.1.
 
-The workflow now pins `flixel 5.3.0` and `flixel-addons 3.2.0`, then checks both class files exist before beginning the HTML5 compile. Sources: HaxeFlixel 5.3.0 changelog and flixel-addons 3.2.0 changelog.
+The workflow therefore uses Haxe 4.3.2, Lime 8.1.2, OpenFL 9.3.3, HaxeFlixel 5.6.1, and flixel-addons 3.2.2. These versions align with the published Psych Engine dependency guidance. The workflow checks the required Flixel APIs before starting the compile.
+
+The HTML5 preparation script also patches the two desktop `File.getContent` calls in Psych Engine's `Paths.loadAnimateAtlas`, and patches the unguarded JSON/XML file reads in the selected `flxanimate` dependency to use `openfl.Assets.getText` for the JavaScript target. Native builds retain their normal filesystem reads. The WOFF generation notices for the mod fonts are non-fatal warnings; they are not the cause of a failed compile.
