@@ -41,3 +41,8 @@ The initial library pins fixed the missing `FlxSound` and `FlxRuntimeShader` cla
 The workflow therefore uses Haxe 4.3.2, Lime 8.1.2, OpenFL 9.3.3, HaxeFlixel 5.6.1, and flixel-addons 3.2.2. These versions align with the published Psych Engine dependency guidance. The workflow checks the required Flixel APIs before starting the compile.
 
 The HTML5 preparation script also patches the two desktop `File.getContent` calls in Psych Engine's `Paths.loadAnimateAtlas`, and patches the unguarded JSON/XML file reads in the selected `flxanimate` dependency to use `openfl.Assets.getText` for the JavaScript target. Native builds retain their normal filesystem reads. The WOFF generation notices for the mod fonts are non-fatal warnings; they are not the cause of a failed compile.
+
+
+## Follow-up HTML5 source compatibility fixes
+
+The current preparation step also guards the character editor's operating-system directory scan from the JavaScript target, qualifies the local `options.Option` class explicitly, updates the Flixel logger call, and uses `FlxObject.setPosition` for the stage camera-follow point. The FlxAnimate filter renderer imports Lime's `ImageCanvasUtil` and is granted access to the Lime `ImageBuffer` canvas context that OpenFL uses internally.
