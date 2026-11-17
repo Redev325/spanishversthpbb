@@ -1,43 +1,31 @@
-# South Park Bloodbath — Spanish Version
+# Bloodbath Spanish Mix — Psych Engine 0.7.3
 
-This repository is configured for **Friday Night Funkin': Psych Engine 0.7.3**.
+This repository targets the official **Friday Night Funkin': Psych Engine 0.7.3** source, pinned as a Git submodule at commit `2dfa27773a3668e0c1b043a3fb4348942c8a6fb3`.
 
-## Engine version
+## HTML5 browser build
 
-The `PsychEngine/` directory is a Git submodule pinned to the official Psych Engine **0.7.3** source commit:
+The original mod ZIP is too large to store as ordinary Git files and includes binary assets. Store it as a GitHub Release asset instead:
 
-- Upstream: https://github.com/ShadowMario/FNF-PsychEngine
-- Tag: `0.7.3`
-- Commit: `2dfa27773a3668e0c1b043a3fb4348942c8a6fb3`
+1. Open **Releases** in this repository and create a release tagged `source-v1.0.0`.
+2. Rename the supplied ZIP to `bloodbath-spanish-mix-source.zip` and attach it to that release.
+3. Publish the release.
+4. Open **Actions → Build Bloodbath Spanish Mix HTML5 → Run workflow**. Keep the source release tag as `source-v1.0.0`.
+5. When the build and deploy jobs succeed, open the GitHub Pages URL shown in the deploy job.
 
-Clone the project with the engine source included:
+You can upload the archive with GitHub CLI by running:
 
 ```bash
-git clone --recurse-submodules https://github.com/Redev325/spanishversthpbb.git
+bash tools/upload_source_release.sh "/path/to/Bloodbath Spanish Mix PC [RTX].zip"
 ```
 
-## Importing the supplied mod folder
+The workflow checks out the pinned engine submodule, installs Haxe and the Psych Engine libraries, converts the mod's OGG audio to browser-compatible MP3 files, embeds the chart and assets into the engine's shared/song asset libraries, and builds the HTML5 target.
 
-The uploaded `Bloodbath Spanish Mix PC [RTX].zip` contains a **Psych Engine mod folder**, not the Psych Engine source itself. Its directory layout (characters, custom_events, custom_notetypes, data, images, scripts, songs, sounds, stages, and weeks) belongs inside the engine's `mods/` directory.
+## Current HTML5 port scope
 
-After extracting the prepared archive, copy:
+The supplied ZIP is a **Psych Engine mod package**, not a Haxe source project. Psych Engine's HTML5 target does not enable its desktop filesystem mod loader or LuaJIT mod scripts. The build therefore embeds the files and includes an initial native Haxe recreation of the `south` stage and selected chart behaviors.
 
-```
-mods/Bloodbath Spanish Mix PC [RTX]/
-```
+The supplied chart contains 2,294 notes across 1,550 sections and 57 distinct event names. The first native port handles the `kyle` note's no-animation behavior, native `GF Sing`, core stage layers, camera zoom/position events, basic fades, flashes, Bad Apple silhouette transition, and selected sprite animations. Other Lua-driven custom events, shader effects, extra character choreography, and some note-type effects are not yet fully ported. A successful HTML5 compile is not the same as a verified full-song playthrough.
 
-into:
+The ZIP contains `Inst.ogg` but no `Voices.ogg`, so the browser build marks the chart as instrumental-only. The supplied `LC.json` is preserved, including its current week/menu metadata.
 
-```
-PsychEngine/mods/Bloodbath Spanish Mix PC [RTX]/
-```
-
-Keep the folder name and internal paths unchanged for the first test. The original archive includes 838 files. The source assets have not been translated or modified during extraction.
-
-## Source archive notes
-
-The archive's metadata is inconsistent: `pack.json` names the pack **Last Chance V7 (Non Pixelated)**, while the week and song folders refer to `LC` and `bloodbath-spanish-mix`. Those values are preserved as supplied; review them before changing week names or identifiers.
-
-## Build
-
-Follow the build instructions in the pinned Psych Engine source. Do not copy this mod folder into the repository root of the engine submodule; it must be placed under `PsychEngine/mods/`.
+See [docs/HTML5_PORT.md](docs/HTML5_PORT.md) for implementation scope and known gaps.
