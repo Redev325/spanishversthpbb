@@ -46,3 +46,8 @@ The HTML5 preparation script also patches the two desktop `File.getContent` call
 ## Follow-up HTML5 source compatibility fixes
 
 The current preparation step also guards the character editor's operating-system directory scan from the JavaScript target, qualifies the local `options.Option` class explicitly, updates the Flixel logger call, and uses `FlxObject.setPosition` for the stage camera-follow point. The FlxAnimate filter renderer imports Lime's `ImageCanvasUtil` and is granted access to the Lime `ImageBuffer` canvas context that OpenFL uses internally.
+
+
+## Story Mode and Freeplay menu data
+
+The browser build contains only the Bloodbath Spanish Mix week, so its HTML5 path explicitly loads the bundled `LC` week instead of depending on a scanned week list. The preparation step normalizes that week to the single embedded Hard chart, marks it visible and unlocked in both Story Mode and Freeplay, and supplies a fallback `images/storymenu/LC.png` banner if the mod does not include one. The HTML5 week loader reads the embedded week JSON through OpenFL's asset API.
