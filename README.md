@@ -18,7 +18,7 @@ You can upload the archive with GitHub CLI by running:
 bash tools/upload_source_release.sh "/path/to/Bloodbath Spanish Mix PC [RTX].zip"
 ```
 
-The workflow checks out the pinned engine submodule, installs Haxe and the Psych Engine libraries, disables desktop-only Discord RPC on HTML5, converts the mod's OGG audio to browser-compatible MP3 files, embeds the chart and assets into the engine's shared/song asset libraries, and builds the HTML5 target.
+The workflow checks out the pinned engine submodule, installs Haxe and the compatible HaxeFlixel 5.3.0 / flixel-addons 3.2.0 libraries, disables desktop-only Discord RPC on HTML5, converts the mod's OGG audio to browser-compatible MP3 files, embeds the chart and assets into the engine's shared/song asset libraries, and builds the HTML5 target.
 
 ## Current HTML5 port scope
 

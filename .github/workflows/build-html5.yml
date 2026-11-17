@@ -46,13 +46,31 @@ jobs:
           # Keep the core HaxeFlixel stack aligned with the known 0.7.x builds.
           haxelib install lime 8.0.1 --always
           haxelib install openfl 9.2.1 --always
-          haxelib install flixel 5.2.2 --always
-          haxelib install flixel-addons 3.0.2 --always
+          haxelib install flixel 5.3.0 --always
+          haxelib install flixel-addons 3.2.0 --always
           haxelib install flixel-ui 2.5.0 --always
           haxelib install flixel-tools
           haxelib install tjson
           haxelib git flxanimate https://github.com/ShadowMario/flxanimate dev
 
+      - name: Verify Psych Engine HaxeFlixel APIs
+        run: |
+                    # Fail early if Haxelib resolved the older APIs that caused missing-type errors.
+                    FLIXEL_PATH="$(haxelib path flixel | head -n 1)"
+                    ADDONS_PATH="$(haxelib path flixel-addons | head -n 1)"
+                    test -f "$FLIXEL_PATH/flixel/sound/FlxSound.hx" || {
+                      echo "flixel.sound.FlxSound is missing; expected HaxeFlixel 5.3.0." >&2
+                      haxelib list
+                      exit 1
+                    }
+                    test -f "$ADDONS_PATH/flixel/addons/display/FlxRuntimeShader.hx" || {
+                      echo "FlxRuntimeShader is missing; expected flixel-addons 3.2.0." >&2
+                      haxelib list
+                      exit 1
+                    }
+                    haxelib list
+          
+          
       - name: Download the supplied mod archive from this repository's release
         env:
           GH_TOKEN: ${{ github.token }}

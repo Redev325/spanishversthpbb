@@ -32,3 +32,10 @@ The build workflow must not be described as a fully faithful release until the d
 ## Browser-specific engine patch
 
 The preparation step changes Psych Engine's unconditional `DISCORD_ALLOWED` define to a desktop-only define and wraps `backend/Discord.hx` with a no-op HTML5 implementation. The upstream file imports C++ pointer APIs and creates a desktop thread, so it cannot be compiled into the JavaScript target. The web workflow therefore does not install `hxdiscord_rpc`.
+
+
+## Compile error fix: HaxeFlixel versions
+
+Psych Engine 0.7.3 imports `flixel.sound.FlxSound` and `flixel.addons.display.FlxRuntimeShader`. The former was moved into the `flixel.sound` package in HaxeFlixel 5.3.0; the latter was introduced in `flixel-addons` 3.2.0. The former workflow pins (5.2.2 and 3.0.2) were too old, producing the missing-type errors before the game source could compile.
+
+The workflow now pins `flixel 5.3.0` and `flixel-addons 3.2.0`, then checks both class files exist before beginning the HTML5 compile. Sources: HaxeFlixel 5.3.0 changelog and flixel-addons 3.2.0 changelog.
