@@ -527,6 +527,25 @@ def patch_html5_engine_source(engine: Path) -> None:
         option_file.write_text(option_source, encoding="utf-8")
 
 
+def patch_html5_week_loader(engine: Path) -> None:
+    """Load the one bundled week directly on HTML5 instead of relying on a text-file scan."""
+    week_file = engine / "source" / "backend" / "WeekData.hx"
+    source = week_file.read_text(encoding="utf-8")
+    original = "\t\tvar sexList:Array<String> = CoolUtil.coolTextFile(Paths.getSharedPath('weeks/weekList.txt'));"
+    replacement = """#if html5
+\t\t// This browser build intentionally embeds only the LC week.
+\t\tvar sexList:Array<String> = ["LC"];
+\t\t#else
+\t\tvar sexList:Array<String> = CoolUtil.coolTextFile(Paths.getSharedPath('weeks/weekList.txt'));
+\t\t#end"""
+    if original in source:
+        source = source.replace(original, replacement, 1)
+    elif replacement not in source:
+        raise RuntimeError("Cannot locate the WeekData week-list loading line.")
+    source = source.replace("rawJson = Assets.getText(path);", "rawJson = OpenFlAssets.getText(path);", 1)
+    week_file.write_text(source, encoding="utf-8")
+
+
 def patch_note_types(engine: Path) -> None:
     note_file = engine / "source" / "objects" / "Note.hx"
     source = note_file.read_text(encoding="utf-8")
@@ -562,6 +581,17 @@ def prepare(engine: Path, mod: Path) -> dict[str, object]:
 
     # Embed mod resources into asset folders already included by Project.xml.
     copy_tree(mod / "images", shared / "images", ignore_duplicate_nested_images)
+
+    # StoryMenuState always requests an image named after the week ID. This
+    # mod has menu_LC.png but no storymenu/LC.png, so supply the stock week
+    # banner only when the mod does not provide its own.
+    story_menu_image = shared / "images" / "storymenu" / f"{WEEK}.png"
+    if not story_menu_image.is_file():
+        fallback_story_image = engine / "assets" / "shared" / "images" / "storymenu" / "week1.png"
+        if not fallback_story_image.is_file():
+            raise FileNotFoundError("Neither storymenu/LC.png nor the engine's week1 fallback image exists.")
+        story_menu_image.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(fallback_story_image, story_menu_image)
     copy_tree(mod / "characters", shared / "characters")
     copy_tree(mod / "data" / SONG, shared / "data" / SONG)
 
@@ -594,6 +624,42 @@ def prepare(engine: Path, mod: Path) -> dict[str, object]:
     song_data = chart_data.get("song", chart_data)
     if not isinstance(song_data, dict):
         raise RuntimeError("Unexpected chart JSON format: the song object is missing.")
+
+    # Make the bundled LC week self-contained and safe for both menu states.
+    # Only the Hard chart is embedded by this browser port.
+    week_file = weeks_destination / week_source.name
+    week_data = json.loads(week_file.read_text(encoding="utf-8"))
+    player_character = song_data.get("player1") or "bf"
+    freeplay_color = week_data.get("freeplayColor")
+    if (not isinstance(freeplay_color, list) or len(freeplay_color) < 3
+            or any(not isinstance(value, (int, float)) for value in freeplay_color[:3])):
+        freeplay_color = [146, 113, 253]
+    else:
+        freeplay_color = [max(0, min(255, int(value))) for value in freeplay_color[:3]]
+
+    week_characters = week_data.get("weekCharacters")
+    if not isinstance(week_characters, list) or len(week_characters) != 3:
+        week_characters = ["dad", "bf", "gf"]
+    week_data["weekCharacters"] = week_characters
+    week_data["songs"] = [[SONG, player_character, freeplay_color]]
+    week_data["weekBackground"] = week_data.get("weekBackground") or WEEK
+    week_data["weekBefore"] = ""
+    week_data["startUnlocked"] = True
+    week_data["hiddenUntilUnlocked"] = False
+    week_data["hideStoryMode"] = False
+    week_data["hideFreeplay"] = False
+    week_data["difficulties"] = "Hard"
+    week_data["storyName"] = week_data.get("storyName") or "Bloodbath Spanish Mix"
+    week_data["weekName"] = week_data.get("weekName") or "Bloodbath Spanish Mix"
+
+    background_image = shared / "images" / "menubackgrounds" / f"menu_{week_data['weekBackground']}.png"
+    if not background_image.is_file():
+        week_data["weekBackground"] = "stage"
+        if not (shared / "images" / "menubackgrounds" / "menu_stage.png").is_file():
+            raise FileNotFoundError("The LC week menu background and engine fallback are both missing.")
+
+    week_file.write_text(json.dumps(week_data, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+
     # The archive contains Inst.ogg but no Voices.ogg.
     song_data["needsVoices"] = False
     song_data["stage"] = "south"
@@ -602,6 +668,7 @@ def prepare(engine: Path, mod: Path) -> dict[str, object]:
     patch_html5_platform_features(engine)
     patch_html5_animate_io(engine)
     patch_html5_engine_source(engine)
+    patch_html5_week_loader(engine)
     patch_note_types(engine)
     patch_stage_registration(engine)
     stage_file = engine / "source" / "states" / "stages" / "South.hx"
@@ -626,6 +693,7 @@ def prepare(engine: Path, mod: Path) -> dict[str, object]:
         "modFolder": mod.name,
         "song": SONG,
         "week": WEEK,
+        "menuWeek": {"songs": [SONG], "difficulty": "Hard", "storyMenuFallbackArt": "storymenu/LC.png"},
         "chart": CHART,
         "songSections": len(song_data.get("notes", [])),
         "noteCount": sum(len(section.get("sectionNotes", [])) for section in song_data.get("notes", []) if isinstance(section, dict)),
