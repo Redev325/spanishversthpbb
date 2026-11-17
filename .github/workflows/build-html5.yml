@@ -43,14 +43,15 @@ jobs:
       - name: Install Psych Engine 0.7.3 libraries
         run: |
           set -euo pipefail
-          haxelib install lime
-          haxelib install openfl
-          haxelib install flixel
-          haxelib install flixel-addons
-          haxelib install flixel-ui
+          # Keep the core HaxeFlixel stack aligned with the known 0.7.x builds.
+          haxelib install lime 8.0.1 --always
+          haxelib install openfl 9.2.1 --always
+          haxelib install flixel 5.2.2 --always
+          haxelib install flixel-addons 3.0.2 --always
+          haxelib install flixel-ui 2.5.0 --always
+          haxelib install flixel-tools
           haxelib install tjson
           haxelib git flxanimate https://github.com/ShadowMario/flxanimate dev
-          haxelib git hxdiscord_rpc https://github.com/MAJigsaw77/hxdiscord_rpc
 
       - name: Download the supplied mod archive from this repository's release
         env:

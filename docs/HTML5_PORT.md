@@ -27,3 +27,8 @@ Psych Engine 0.7.3 enables `MODS_ALLOWED`, `HSCRIPT_ALLOWED`, and `LUA_ALLOWED` 
 The original archive includes hundreds of Lua custom-event files and song scripts. The first native pass does not translate all of them. Several chart event families and their shader effects, the full Kyle/Clyde/Craig extra-character choreography, glitch note effects, arrow manipulation, lyrics overlays, and other scripted scene changes remain incomplete. Those behaviors need individual Haxe ports, followed by a full playthrough test in the browser.
 
 The build workflow must not be described as a fully faithful release until the deployed page is loaded and the complete song is tested from beginning to end.
+
+
+## Browser-specific engine patch
+
+The preparation step changes Psych Engine's unconditional `DISCORD_ALLOWED` define to a desktop-only define and wraps `backend/Discord.hx` with a no-op HTML5 implementation. The upstream file imports C++ pointer APIs and creates a desktop thread, so it cannot be compiled into the JavaScript target. The web workflow therefore does not install `hxdiscord_rpc`.

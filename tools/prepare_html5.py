@@ -346,6 +346,50 @@ def copy_audio_folder(source: Path, destination: Path) -> int:
     return count
 
 
+def patch_html5_platform_features(engine: Path) -> None:
+    """Remove desktop-only Discord RPC from the JavaScript target."""
+    project_file = engine / "Project.xml"
+    project = project_file.read_text(encoding="utf-8")
+    old_define = '<define name="DISCORD_ALLOWED" />'
+    new_define = '<define name="DISCORD_ALLOWED" if="desktop" />'
+    if old_define in project:
+        project = project.replace(old_define, new_define, 1)
+        project_file.write_text(project, encoding="utf-8")
+    elif new_define not in project:
+        raise RuntimeError("Could not find the Discord feature define in Project.xml.")
+
+    discord_file = engine / "source" / "backend" / "Discord.hx"
+    if not discord_file.is_file():
+        raise FileNotFoundError(f"Psych Engine Discord source is missing: {discord_file}")
+    original = discord_file.read_text(encoding="utf-8")
+    marker = "// HTML5 Discord RPC stub"
+    if marker not in original:
+        # Discord.hx imports hxdiscord_rpc and cpp pointer/thread APIs at file
+        # scope. Merely setting DISCORD_ALLOWED off does not make those imports
+        # safe on JS, so provide a no-op implementation for the html5 target.
+        stub = """#if html5
+package backend;
+
+// HTML5 Discord RPC stub. The original implementation requires C++ and desktop threads.
+class DiscordClient
+{
+    public static var isInitialized:Bool = false;
+    public static var clientID:String = "863222024192262205";
+    public static function check():Void {}
+    public static function prepare():Void {}
+    public static function shutdown():Void { isInitialized = false; }
+    public static function initialize():Void {}
+    public static function changePresence(?details:String = "In the Menus", ?state:Null<String>, ?smallImageKey:String, ?hasStartTimestamp:Bool, ?endTimestamp:Float):Void {}
+    public static function updatePresence():Void {}
+    public static function resetClientID():Void {}
+    public static function loadModRPC():Void {}
+    public static function addLuaCallbacks(lua:Dynamic):Void {}
+}
+#else
+"""
+        discord_file.write_text(stub + original.rstrip() + chr(10) + "#end" + chr(10), encoding="utf-8")
+
+
 def patch_note_types(engine: Path) -> None:
     note_file = engine / "source" / "objects" / "Note.hx"
     source = note_file.read_text(encoding="utf-8")
@@ -418,6 +462,7 @@ def prepare(engine: Path, mod: Path) -> dict[str, object]:
     song_data["stage"] = "south"
     chart_file.write_text(json.dumps(chart_data, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
 
+    patch_html5_platform_features(engine)
     patch_note_types(engine)
     patch_stage_registration(engine)
     stage_file = engine / "source" / "states" / "stages" / "South.hx"
