@@ -656,7 +656,31 @@ def prepare(engine: Path, mod: Path) -> dict[str, object]:
     characters = week_data.get("weekCharacters")
     if not isinstance(characters, list) or len(characters) != 3 or not all(isinstance(value, str) and value for value in characters):
         week_data["weekCharacters"] = ["dad", "bf", "gf"]
-    week_data["weekBackground"] = week_data.get("weekBackground") if isinstance(week_data.get("weekBackground"), str) else ""
+    # StoryMenuState resolves this value as menubackgrounds/menu_<name>.png.
+    # The supplied archive contains menu_LC.png (case-sensitive on Pages).
+    background_candidates = ("LC", "lc", "")
+    background_name = ""
+    for candidate in background_candidates:
+        if not candidate:
+            continue
+        if (shared / "images" / "menubackgrounds" / f"menu_{candidate}.png").is_file():
+            background_name = candidate
+            break
+    week_data["weekBackground"] = background_name
+
+    # MenuItem loads storymenu/<week-file-name>.png. There is no LC.png in
+    # the supplied package or stock engine assets, so add a real bundled
+    # fallback card to prevent the Story Menu from requesting a missing image.
+    storymenu_dir = shared / "images" / "storymenu"
+    storymenu_dir.mkdir(parents=True, exist_ok=True)
+    storymenu_card = storymenu_dir / f"{WEEK}.png"
+    if not storymenu_card.is_file():
+        fallback_card = storymenu_dir / "week1.png"
+        if not fallback_card.is_file():
+            fallback_card = storymenu_dir / "tutorial.png"
+        if not fallback_card.is_file():
+            raise FileNotFoundError("No stock story menu card is available for the LC week.")
+        shutil.copy2(fallback_card, storymenu_card)
     week_data["storyName"] = week_data.get("storyName") if isinstance(week_data.get("storyName"), str) and week_data.get("storyName") else display_song
     week_data["weekName"] = week_data.get("weekName") if isinstance(week_data.get("weekName"), str) and week_data.get("weekName") else display_song
     week_data["weekBefore"] = ""
@@ -723,6 +747,8 @@ def prepare(engine: Path, mod: Path) -> dict[str, object]:
         "menuModes": {"storyMode": True, "freeplay": True},
         "weekVisible": {"storyMode": not week_data["hideStoryMode"], "freeplay": not week_data["hideFreeplay"]},
         "availableDifficulties": ["Hard"],
+        "storyMenuCard": f"images/storymenu/{WEEK}.png",
+        "storyMenuBackground": week_data["weekBackground"],
         "songSections": len(song_data.get("notes", [])),
         "noteCount": sum(len(section.get("sectionNotes", [])) for section in song_data.get("notes", []) if isinstance(section, dict)),
         "events": dict(event_counts),
