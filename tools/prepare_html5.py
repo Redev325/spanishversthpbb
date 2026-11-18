@@ -91,7 +91,9 @@ class South extends BaseStage
 
         bg1 = addAnimated("bg", "bg", -1670, -1140, 2.7, 2.7, "bg a", 17, true);
         bg1.alpha = 0;
-        bg2 = addAnimated("bg2", "bg2", -1670, -1340, 2.7, 2.7, "bg2 a", 17, true);
+        // bg2 is the second pass of the same backdrop; keep its origin aligned
+        // with bg so the scene does not jump vertically when the chart fades layers.
+        bg2 = addAnimated("bg2", "bg2", -1670, -1140, 2.7, 2.7, "bg2 a", 17, true);
         bg2.alpha = 0;
         bg3 = addAnimated("bg3", "bg3", -1270, -540, 2.8, 2.7, "bg3 a", 17, true);
         bg3.alpha = 0;
@@ -113,7 +115,13 @@ class South extends BaseStage
         anim2.alpha = 0;
         anim3 = addAnimated("anim3", "anim3", 0, 0, 1, 1, "anim3", 24, false, true);
         anim3.alpha = 0;
-        anim4 = addAnimated("anim4", "anim4", 40, 40, 0.6, 0.6, "anim4 a", 60, false, true);
+        // anim4 atlas frames are authored at 1920x1080. Fit one frame to
+        // the complete 16:9 game viewport instead of showing it as a small inset.
+        anim4 = addAnimated("anim4", "anim4", 0, 0,
+            FlxG.width / 1920, FlxG.height / 1080, "anim4 a", 60, false, true);
+        anim4.updateHitbox();
+        anim4.scrollFactor.set(0, 0);
+        anim4.cameras = [camOther];
         anim4.alpha = 0;
 
         vignette = addStill("Vignette", "Vignette", -20, 0, true);
@@ -575,6 +583,94 @@ def patch_stage_registration(engine: Path) -> None:
         play_file.write_text(source, encoding="utf-8")
 
 
+def validate_character_assets(shared: Path, song_data: dict[str, object]) -> dict[str, object]:
+    """Verify every chart-timed character swap can load from embedded HTML5 assets."""
+    initial_characters = {
+        "boyfriend": str(song_data.get("player1") or "bf"),
+        "opponent": str(song_data.get("player2") or "dad"),
+        "girlfriend": str(song_data.get("gfVersion") or "gf"),
+    }
+    character_changes: list[dict[str, object]] = []
+
+    for event_group in song_data.get("events", []):
+        if not isinstance(event_group, list) or len(event_group) < 2:
+            continue
+        try:
+            event_time = float(event_group[0])
+        except (TypeError, ValueError):
+            continue
+
+        event_items = event_group[1]
+        if not isinstance(event_items, list):
+            continue
+        for event in event_items:
+            if not isinstance(event, list) or len(event) < 3:
+                continue
+            if str(event[0]).strip().lower() != "change character":
+                continue
+
+            target = str(event[1] or "").strip().lower()
+            if target in {"gf", "girlfriend", "2"}:
+                slot = "girlfriend"
+            elif target in {"dad", "opponent", "1"}:
+                slot = "opponent"
+            else:
+                # Psych Engine's Change Character event defaults to boyfriend.
+                slot = "boyfriend"
+
+            character = str(event[2] or "").strip()
+            if not character:
+                raise RuntimeError(f"Empty Change Character target at {event_time:.2f} ms.")
+            character_changes.append({
+                "timeMs": round(event_time, 2),
+                "slot": slot,
+                "character": character,
+            })
+
+    required_characters = set(initial_characters.values())
+    required_characters.update(str(change["character"]) for change in character_changes)
+
+    character_assets: dict[str, dict[str, str]] = {}
+    for character in sorted(required_characters):
+        character_file = shared / "characters" / f"{character}.json"
+        if not character_file.is_file():
+            raise FileNotFoundError(
+                f"Chart character '{character}' is missing its embedded JSON: {character_file}"
+            )
+        try:
+            definition = json.loads(character_file.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+            raise RuntimeError(f"Invalid character JSON for '{character}': {exc}") from exc
+
+        image_key = definition.get("image")
+        if not isinstance(image_key, str) or not image_key.strip():
+            raise RuntimeError(f"Character '{character}' has no image atlas path.")
+        image_base = shared / "images" / image_key
+        image_file = image_base.with_suffix(".png")
+        atlas_file = next(
+            (image_base.with_suffix(ext) for ext in (".xml", ".json", ".txt")
+             if image_base.with_suffix(ext).is_file()),
+            None,
+        )
+        if not image_file.is_file() or atlas_file is None:
+            raise FileNotFoundError(
+                f"Character '{character}' atlas is incomplete: expected {image_file} "
+                f"and a matching XML/JSON/TXT atlas description."
+            )
+        character_assets[character] = {
+            "json": character_file.relative_to(shared).as_posix(),
+            "image": image_file.relative_to(shared).as_posix(),
+            "atlas": atlas_file.relative_to(shared).as_posix(),
+        }
+
+    return {
+        "initialCharacters": initial_characters,
+        "characterChanges": character_changes,
+        "validatedCharacterCount": len(character_assets),
+        "characterAssets": character_assets,
+    }
+
+
 def prepare(engine: Path, mod: Path) -> dict[str, object]:
     shared = engine / "assets" / "shared"
     shared.mkdir(parents=True, exist_ok=True)
@@ -624,6 +720,11 @@ def prepare(engine: Path, mod: Path) -> dict[str, object]:
     song_data = chart_data.get("song", chart_data)
     if not isinstance(song_data, dict):
         raise RuntimeError("Unexpected chart JSON format: the song object is missing.")
+
+    # Psych Engine's native Change Character event preloads these definitions
+    # and switches them at the chart-authored timestamps. Fail the build rather
+    # than silently falling back to a default character when one is not embedded.
+    character_validation = validate_character_assets(shared, song_data)
 
     # Make the bundled LC week self-contained and safe for both menu states.
     # Only the Hard chart is embedded by this browser port.
@@ -695,6 +796,7 @@ def prepare(engine: Path, mod: Path) -> dict[str, object]:
         "week": WEEK,
         "menuWeek": {"songs": [SONG], "difficulty": "Hard", "storyMenuFallbackArt": "storymenu/LC.png"},
         "chart": CHART,
+        **character_validation,
         "songSections": len(song_data.get("notes", [])),
         "noteCount": sum(len(section.get("sectionNotes", [])) for section in song_data.get("notes", []) if isinstance(section, dict)),
         "events": dict(event_counts),
