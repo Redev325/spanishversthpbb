@@ -106,6 +106,68 @@ jobs:
           mkdir -p _site
           cp -a "$WEB_DIR/." _site/
           cp "$RUNNER_TEMP/html5-build-report.json" _site/BUILD-REPORT.json
+
+          # Show uncaught browser exceptions on top of the game canvas.
+          # This is especially useful for HTML5-only asset/runtime failures,
+          # which otherwise leave the player with a silent black screen.
+          python3 - <<'PY'
+          from pathlib import Path
+
+          page = Path("_site/index.html")
+          html = page.read_text(encoding="utf-8")
+          marker = "HTML5 runtime diagnostics overlay"
+          if marker not in html:
+              diagnostic = r"""
+          <script>
+          // HTML5 runtime diagnostics overlay
+          (function () {
+              var reported = 0;
+              function report(title, details) {
+                  try {
+                      var panel = document.getElementById("html5-runtime-diagnostics");
+                      if (!panel) {
+                          panel = document.createElement("div");
+                          panel.id = "html5-runtime-diagnostics";
+                          panel.style.cssText = "position:fixed;z-index:2147483647;top:8px;left:8px;right:8px;max-height:42vh;overflow:auto;background:rgba(35,0,0,.96);border:2px solid #ff5959;border-radius:6px;color:#fff;padding:12px;font:12px/1.45 monospace;white-space:pre-wrap;overflow-wrap:anywhere;box-shadow:0 2px 12px #000";
+                          document.body.appendChild(panel);
+                      }
+                      var item = document.createElement("pre");
+                      item.style.cssText = "margin:0 0 8px;padding:0;color:#fff;white-space:pre-wrap;font:inherit";
+                      item.textContent = title + "\n" + String(details || "No additional details");
+                      panel.appendChild(item);
+                      reported++;
+                      if (reported > 12) panel.removeChild(panel.children[1]);
+                  } catch (_) {}
+              }
+              window.addEventListener("error", function (event) {
+                  if (event instanceof ErrorEvent) {
+                      report("JavaScript runtime error", (event.message || "Unknown error") +
+                          (event.filename ? "\nFile: " + event.filename : "") +
+                          (event.lineno ? "\nLine: " + event.lineno + ":" + (event.colno || 0) : "") +
+                          (event.error && event.error.stack ? "\n\n" + event.error.stack : ""));
+                  }
+              }, true);
+              window.addEventListener("unhandledrejection", function (event) {
+                  var reason = event.reason;
+                  report("Unhandled promise rejection", reason && reason.stack ? reason.stack : reason);
+              });
+              var originalError = console.error;
+              console.error = function () {
+                  try { report("Console error", Array.prototype.slice.call(arguments).map(function (x) {
+                      return x && x.stack ? x.stack : String(x);
+                  }).join("\n")); } catch (_) {}
+                  return originalError.apply(console, arguments);
+              };
+          })();
+          </script>
+          """
+              script_marker = '<script type="text/javascript" src="./PsychEngine.js"></script>'
+              if script_marker not in html:
+                  raise SystemExit("Cannot locate PsychEngine.js script tag to install diagnostics.")
+              html = html.replace(script_marker, diagnostic + "\n" + script_marker, 1)
+              page.write_text(html, encoding="utf-8")
+          PY
+
           touch _site/.nojekyll
           SITE_BYTES="$(du -sb _site | cut -f1)"
           echo "HTML5 site size: $SITE_BYTES bytes"
