@@ -46,21 +46,3 @@ The HTML5 preparation script also patches the two desktop `File.getContent` call
 ## Follow-up HTML5 source compatibility fixes
 
 The current preparation step also guards the character editor's operating-system directory scan from the JavaScript target, qualifies the local `options.Option` class explicitly, updates the Flixel logger call, and uses `FlxObject.setPosition` for the stage camera-follow point. The FlxAnimate filter renderer imports Lime's `ImageCanvasUtil` and is granted access to the Lime `ImageBuffer` canvas context that OpenFL uses internally.
-
-
-## Story Mode and Freeplay menu data
-
-The browser build contains only the Bloodbath Spanish Mix week, so its HTML5 path explicitly loads the bundled `LC` week instead of depending on a scanned week list. The preparation step normalizes that week to the single embedded Hard chart, marks it visible and unlocked in both Story Mode and Freeplay, and supplies a fallback `images/storymenu/LC.png` banner if the mod does not include one. The HTML5 week loader reads the embedded week JSON through OpenFL's asset API.
-
-
-## Stage backdrop alignment and full-screen cutscene
-
-The native south stage keeps the paired bg and bg2 layers on the same world-space origin and scale. Their frame dimensions are nearly identical, so moving bg2 upward independently caused a visible jump at the chart's second-background transition. The later bg3 and bg4 layers remain paired at their own scene coordinates.
-
-The anim4 atlas contains 1920×1080 frames. Its stage sprite is now placed at the viewport origin, scaled to the current game width and height, and drawn through the overlay camera so the cutscene fills the 16:9 view rather than appearing inset in a corner.
-
-## Chart-timed character changes
-
-Psych Engine 0.7.3 already handles the chart's native Change Character event and schedules each swap at its authored chart timestamp. The HTML5 preparation step now validates the initial boyfriend/opponent/girlfriend definitions and every character referenced by a Change Character event, including its JSON file, PNG atlas, and atlas metadata. The build report records the initial cast, each timestamped swap, and the assets validated.
-
-This validates the main-character replacements; it does not imply that every Lua-only extra character actor or custom note animation has been ported. Those remain part of the known Lua parity gaps above.
