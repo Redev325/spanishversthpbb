@@ -8,11 +8,11 @@ The supplied archive contains 838 files (873 ZIP entries including directory ent
 
 The chart has 1,550 sections, 2,294 notes, and 57 distinct event names. The original note types found in the chart are `GF Sing`, `kyle`, `craignote`, `Glitch Note`, `cledyNOTE`, `glitchColor`, and `Trail Note Shake`.
 
-The archive has `songs/bloodbath-spanish-mix/Inst.ogg`, but no `Voices.ogg`. The HTML5 preparation step therefore sets `needsVoices` to `false` and converts OGG files to MP3 because the Psych Engine 0.7.3 web asset manifest excludes OGG files.
+The archive has `songs/bloodbath-spanish-mix/Inst.ogg`, but no `Voices.ogg`. The HTML5 preparation step therefore sets `needsVoices` to `false`, embeds the original OGG files in the web asset libraries, and patches Psych Engine's audio resolver to fall back from MP3 to OGG when a matching MP3 is absent.
 
 ## Why the mod is embedded
 
-Psych Engine 0.7.3 enables `MODS_ALLOWED`, `HSCRIPT_ALLOWED`, and `LUA_ALLOWED` only for desktop builds in `Project.xml`. Its normal mod filesystem loader and LuaJIT scripts are not available to the HTML5 target. The preparation script places character definitions, stage definitions, charts, week metadata, images, sounds, and the song instrumental into the shared and songs asset libraries that are compiled into the web build.
+Psych Engine 0.7.3 enables `MODS_ALLOWED`, `HSCRIPT_ALLOWED`, and `LUA_ALLOWED` only for desktop builds in `Project.xml`. Its normal mod filesystem loader and LuaJIT scripts are not available to the HTML5 target. The preparation script places character definitions, stage definitions, charts, normalized week metadata, story-menu assets, images, sounds, and the original song instrumental into the shared and songs asset libraries that are compiled into the web build.
 
 ## Native behavior currently implemented
 
@@ -40,7 +40,7 @@ The initial library pins fixed the missing `FlxSound` and `FlxRuntimeShader` cla
 
 The workflow therefore uses Haxe 4.3.2, Lime 8.1.2, OpenFL 9.3.3, HaxeFlixel 5.6.1, and flixel-addons 3.2.2. These versions align with the published Psych Engine dependency guidance. The workflow checks the required Flixel APIs before starting the compile.
 
-The HTML5 preparation script also patches the two desktop `File.getContent` calls in Psych Engine's `Paths.loadAnimateAtlas`, and patches the unguarded JSON/XML file reads in the selected `flxanimate` dependency to use `openfl.Assets.getText` for the JavaScript target. Native builds retain their normal filesystem reads. The WOFF generation notices for the mod fonts are non-fatal warnings; they are not the cause of a failed compile.
+The HTML5 preparation script also patches the two desktop `File.getContent` calls in Psych Engine's `Paths.loadAnimateAtlas`, and patches the unguarded JSON/XML file reads in the selected `flxanimate` dependency to use `openfl.Assets.getText` for the JavaScript target. Native builds retain their normal filesystem reads. It includes OGG files in the web asset libraries and adds a browser audio resolver fallback for the original OGG instrumental. The WOFF generation notices for the mod fonts are non-fatal warnings; they are not the cause of a failed compile.
 
 
 ## Follow-up HTML5 source compatibility fixes
