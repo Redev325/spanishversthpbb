@@ -401,6 +401,7 @@ def patch_html5_ogg_fallback(engine: Path) -> None:
 \t\tif(path != null) gottenPath = '$path/$gottenPath';
 \t\tgottenPath = getPath(gottenPath, SOUND, library);
 \t\tgottenPath = gottenPath.substring(gottenPath.indexOf(':') + 1, gottenPath.length);
+\t\t// trace(gottenPath);
 \t\tif(!currentTrackedSounds.exists(gottenPath))
 \t\t{
 \t\t\tvar retKey:String = (path != null) ? '$path/$key' : key;
