@@ -2,8 +2,8 @@
 """Prepare Bloodbath Spanish Mix for an embedded Psych Engine 0.7.3 HTML5 build.
 
 Psych Engine's desktop mod filesystem is not available on HTML5. This script
-copies the mod's data into the normal shared/songs asset libraries, converts
-OGG audio to MP3 for the web asset manifest, and adds a native Haxe stage
+embeds the mod's data and original audio files in the shared/songs asset
+libraries, enables the web OGG asset path, and adds a native Haxe stage
 implementation for the chart's south stage.
 
 This is an initial browser port: Lua-only custom events and shader effects that
@@ -318,30 +318,16 @@ def ignore_duplicate_nested_images(directory: str, names: list[str]) -> set[str]
     return set()
 
 
-def convert_audio(source: Path, destination: Path) -> None:
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    target = destination.with_suffix(".mp3")
-    if source.suffix.lower() == ".mp3":
-        shutil.copy2(source, target)
-        return
-    if source.suffix.lower() != ".ogg":
-        raise RuntimeError(f"Unsupported audio format for HTML5: {source}")
-    subprocess.run(
-        ["ffmpeg", "-nostdin", "-hide_banner", "-loglevel", "error", "-y",
-         "-i", str(source), "-vn", "-codec:a", "libmp3lame", "-q:a", "2",
-         str(target)],
-        check=True,
-    )
-
-
 def copy_audio_folder(source: Path, destination: Path) -> int:
+    """Copy original browser-decodable MP3/OGG audio without re-encoding."""
     if not source.is_dir():
         return 0
+    destination.mkdir(parents=True, exist_ok=True)
     count = 0
     for audio in sorted(source.iterdir()):
         if not audio.is_file() or audio.suffix.lower() not in {".ogg", ".mp3"}:
             continue
-        convert_audio(audio, destination / audio.name)
+        shutil.copy2(audio, destination / audio.name)
         count += 1
     return count
 
@@ -354,8 +340,21 @@ def patch_html5_platform_features(engine: Path) -> None:
     new_define = '<define name="DISCORD_ALLOWED" if="desktop" />'
     if old_define in project:
         project = project.replace(old_define, new_define, 1)
+
+    # The supplied mod stores its instrumental and sound effects as OGG.
+    # Include OGG files in the two web libraries; Paths.returnSound will still
+    # prefer MP3 when present and fall back to OGG for the mod's audio.
+    ogg_exclude = 'exclude="*.ogg" if="web"'
+    if ogg_exclude in project:
+        if project.count(ogg_exclude) != 2:
+            raise RuntimeError("Expected exactly two web OGG exclusions in Project.xml.")
+        project = project.replace(ogg_exclude, 'if="web"')
+    elif project.count('if="web"') < 2:
+        raise RuntimeError("Cannot verify that both web asset libraries include OGG audio.")
+
+    if project != project_file.read_text(encoding="utf-8"):
         project_file.write_text(project, encoding="utf-8")
-    elif new_define not in project:
+    if new_define not in project:
         raise RuntimeError("Could not find the Discord feature define in Project.xml.")
 
     discord_file = engine / "source" / "backend" / "Discord.hx"
@@ -388,6 +387,62 @@ class DiscordClient
 #else
 """
         discord_file.write_text(stub + original.rstrip() + chr(10) + "#end" + chr(10), encoding="utf-8")
+
+
+def patch_html5_ogg_fallback(engine: Path) -> None:
+    """Resolve original OGG files when an HTML5 MP3 asset is not present."""
+    paths_file = engine / "source" / "backend" / "Paths.hx"
+    source = paths_file.read_text(encoding="utf-8")
+    fallback_marker = "// HTML5 OGG fallback"
+    if fallback_marker in source:
+        return
+
+    old = """\t\tvar gottenPath:String = '$key.$SOUND_EXT';
+\t\tif(path != null) gottenPath = '$path/$gottenPath';
+\t\tgottenPath = getPath(gottenPath, SOUND, library);
+\t\tgottenPath = gottenPath.substring(gottenPath.indexOf(':') + 1, gottenPath.length);
+\t\tif(!currentTrackedSounds.exists(gottenPath))
+\t\t{
+\t\t\tvar retKey:String = (path != null) ? '$path/$key' : key;
+\t\t\tretKey = ((path == 'songs') ? 'songs:' : '') + getPath('$retKey.$SOUND_EXT', SOUND, library);
+\t\t\tif(OpenFlAssets.exists(retKey, SOUND))
+\t\t\t{
+\t\t\t\tcurrentTrackedSounds.set(gottenPath, OpenFlAssets.getSound(retKey));
+\t\t\t\t//trace('precached vanilla sound: $retKey');
+\t\t\t}
+\t\t}
+"""
+    new = """\t\tvar assetPath:String = (path != null) ? '$path/$key' : key;
+\t\tvar gottenPath:String = getPath('$assetPath.$SOUND_EXT', SOUND, library);
+\t\tgottenPath = gottenPath.substring(gottenPath.indexOf(':') + 1, gottenPath.length);
+\t\tvar retKey:String = ((path == 'songs') ? 'songs:' : '') + getPath('$assetPath.$SOUND_EXT', SOUND, library);
+\t\t#if html5
+\t\t// HTML5 OGG fallback: preserve MP3 preference but load original OGG when
+\t\t// the mod does not ship a browser-specific MP3.
+\t\tif(!OpenFlAssets.exists(retKey, SOUND))
+\t\t{
+\t\t\tvar oggPath:String = getPath('$assetPath.ogg', SOUND, library);
+\t\t\tvar oggKey:String = ((path == 'songs') ? 'songs:' : '') + oggPath;
+\t\t\tif(OpenFlAssets.exists(oggKey, SOUND))
+\t\t\t{
+\t\t\t\tgottenPath = oggPath.substring(oggPath.indexOf(':') + 1, oggPath.length);
+\t\t\t\tretKey = oggKey;
+\t\t\t}
+\t\t}
+\t\t#end
+\t\tif(!currentTrackedSounds.exists(gottenPath))
+\t\t{
+\t\t\tif(OpenFlAssets.exists(retKey, SOUND))
+\t\t\t{
+\t\t\t\tcurrentTrackedSounds.set(gottenPath, OpenFlAssets.getSound(retKey));
+\t\t\t\t//trace('precached vanilla sound: $retKey');
+\t\t\t}
+\t\t}
+"""
+    if source.count(old) != 1:
+        raise RuntimeError("Cannot locate the unique Paths.returnSound audio asset lookup block.")
+    source = source.replace(old, new, 1)
+    paths_file.write_text(source, encoding="utf-8")
 
 
 def patch_html5_animate_io(engine: Path) -> None:
@@ -699,8 +754,9 @@ def prepare(engine: Path, mod: Path) -> dict[str, object]:
     sound_count = copy_audio_folder(mod / "sounds", shared / "sounds")
     song_destination = engine / "assets" / "songs" / SONG
     song_count = copy_audio_folder(mod / "songs" / SONG, song_destination)
-    if not any(p.stem.lower() == "inst" for p in song_destination.glob("*.mp3")):
-        raise FileNotFoundError("The browser song library is missing Inst.mp3 after conversion.")
+    if not any(p.stem.lower() == "inst" and p.suffix.lower() in {".ogg", ".mp3"}
+               for p in song_destination.iterdir()):
+        raise FileNotFoundError("The browser song library is missing Inst.ogg/Inst.mp3.")
 
     chart_file = shared / "data" / SONG / CHART
     if not chart_file.is_file():
@@ -715,6 +771,7 @@ def prepare(engine: Path, mod: Path) -> dict[str, object]:
     chart_file.write_text(json.dumps(chart_data, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
 
     patch_html5_platform_features(engine)
+    patch_html5_ogg_fallback(engine)
     patch_html5_animate_io(engine)
     patch_html5_engine_source(engine)
     patch_html5_week_loading(engine)
@@ -753,8 +810,8 @@ def prepare(engine: Path, mod: Path) -> dict[str, object]:
         "noteCount": sum(len(section.get("sectionNotes", [])) for section in song_data.get("notes", []) if isinstance(section, dict)),
         "events": dict(event_counts),
         "noteTypes": dict(note_counts),
-        "convertedSongAudioFiles": song_count,
-        "convertedSoundFiles": sound_count,
+        "embeddedSongAudioFiles": song_count,
+        "embeddedSoundFiles": sound_count,
         "noteTypePort": ["kyle", "GF Sing (native Psych Engine)"],
         "stagePort": "south (initial Haxe recreation; non-core Lua effects remain unported)",
     }
