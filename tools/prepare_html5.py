@@ -527,6 +527,66 @@ def patch_html5_engine_source(engine: Path) -> None:
         option_file.write_text(option_source, encoding="utf-8")
 
 
+def patch_html5_week_loading(engine: Path) -> None:
+    """Register the one embedded week directly on HTML5."""
+    week_file = engine / "source" / "backend" / "WeekData.hx"
+    source = week_file.read_text(encoding="utf-8")
+    original = "\t\tvar sexList:Array<String> = CoolUtil.coolTextFile(Paths.getSharedPath('weeks/weekList.txt'));"
+    replacement = """\t\t#if html5
+\t\tvar sexList:Array<String> = ["LC"];
+\t\t#else
+\t\tvar sexList:Array<String> = CoolUtil.coolTextFile(Paths.getSharedPath('weeks/weekList.txt'));
+\t\t#end"""
+    if 'var sexList:Array<String> = ["LC"];' not in source:
+        if source.count(original) != 1:
+            raise RuntimeError("Cannot locate the Psych Engine week-list load statement.")
+        source = source.replace(original, replacement, 1)
+        week_file.write_text(source, encoding="utf-8")
+
+
+def patch_html5_menu_guards(engine: Path) -> None:
+    """Show actionable diagnostics instead of crashing on an empty HTML5 menu."""
+    story_file = engine / "source" / "states" / "StoryMenuState.hx"
+    story = story_file.read_text(encoding="utf-8")
+    story_marker = "\t\tWeekData.setDirectoryFromWeek(loadedWeeks[0]);"
+    story_guard = """\t\tif (loadedWeeks.length < 1)
+\t\t{
+\t\t\tvar message = new FlxText(0, 0, FlxG.width, "No Story Mode week was loaded. Check the embedded LC week data.", 24);
+\t\t\tmessage.setFormat(Paths.font("vcr.ttf"), 24, FlxColor.WHITE, CENTER, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
+\t\t\tmessage.screenCenter();
+\t\t\tadd(message);
+\t\t\tsuper.create();
+\t\t\treturn;
+\t\t}
+
+"""
+    if "No Story Mode week was loaded." not in story:
+        if story.count(story_marker) != 1:
+            raise RuntimeError("Cannot locate the StoryMenuState initial week access.")
+        story = story.replace(story_marker, story_guard + story_marker, 1)
+        story_file.write_text(story, encoding="utf-8")
+
+    freeplay_file = engine / "source" / "states" / "FreeplayState.hx"
+    freeplay = freeplay_file.read_text(encoding="utf-8")
+    freeplay_marker = "\t\tMods.loadTopMod();"
+    freeplay_guard = """\t\tif (songs.length < 1)
+\t\t{
+\t\t\tvar message = new FlxText(0, 0, FlxG.width, "No Freeplay songs were loaded from the embedded LC week.", 24);
+\t\t\tmessage.setFormat(Paths.font("vcr.ttf"), 24, FlxColor.WHITE, CENTER, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
+\t\t\tmessage.screenCenter();
+\t\t\tadd(message);
+\t\t\tsuper.create();
+\t\t\treturn;
+\t\t}
+
+"""
+    if "No Freeplay songs were loaded" not in freeplay:
+        if freeplay.count(freeplay_marker) != 1:
+            raise RuntimeError("Cannot locate the FreeplayState song-list completion point.")
+        freeplay = freeplay.replace(freeplay_marker, freeplay_guard + freeplay_marker, 1)
+        freeplay_file.write_text(freeplay, encoding="utf-8")
+
+
 def patch_note_types(engine: Path) -> None:
     note_file = engine / "source" / "objects" / "Note.hx"
     source = note_file.read_text(encoding="utf-8")
@@ -575,7 +635,38 @@ def prepare(engine: Path, mod: Path) -> dict[str, object]:
     week_source = mod / "weeks" / f"{WEEK}.json"
     if not week_source.is_file():
         raise FileNotFoundError(f"Missing week file: {week_source}")
-    shutil.copy2(week_source, weeks_destination / week_source.name)
+
+    # This browser build embeds one playable chart, whose only chart file is
+    # bloodbath-spanish-mix-hard.json. Make the week visible/unlocked in both
+    # menus and make Hard the sole offered difficulty so both menu paths resolve
+    # the exact chart that is actually embedded.
+    week_data = json.loads(week_source.read_text(encoding="utf-8"))
+    if not isinstance(week_data, dict):
+        raise RuntimeError("The LC week metadata must be a JSON object.")
+
+    display_song = " ".join(part.capitalize() for part in SONG.split("-"))
+    source_songs = week_data.get("songs")
+    source_song = source_songs[0] if isinstance(source_songs, list) and source_songs else []
+    song_character = source_song[1] if isinstance(source_song, list) and len(source_song) > 1 and isinstance(source_song[1], str) and source_song[1] else "bf"
+    song_color = source_song[2] if isinstance(source_song, list) and len(source_song) > 2 else week_data.get("freeplayColor")
+    if not isinstance(song_color, list) or len(song_color) < 3 or not all(isinstance(value, int) for value in song_color[:3]):
+        song_color = [146, 113, 253]
+
+    week_data["songs"] = [[display_song, song_character, song_color[:3]]]
+    characters = week_data.get("weekCharacters")
+    if not isinstance(characters, list) or len(characters) != 3 or not all(isinstance(value, str) and value for value in characters):
+        week_data["weekCharacters"] = ["dad", "bf", "gf"]
+    week_data["weekBackground"] = week_data.get("weekBackground") if isinstance(week_data.get("weekBackground"), str) else ""
+    week_data["storyName"] = week_data.get("storyName") if isinstance(week_data.get("storyName"), str) and week_data.get("storyName") else display_song
+    week_data["weekName"] = week_data.get("weekName") if isinstance(week_data.get("weekName"), str) and week_data.get("weekName") else display_song
+    week_data["weekBefore"] = ""
+    week_data["startUnlocked"] = True
+    week_data["hiddenUntilUnlocked"] = False
+    week_data["hideStoryMode"] = False
+    week_data["hideFreeplay"] = False
+    week_data["difficulties"] = "Hard"
+    normalized_week = weeks_destination / week_source.name
+    normalized_week.write_text(json.dumps(week_data, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
     (weeks_destination / "weekList.txt").write_text(WEEK + "\n", encoding="utf-8")
 
     if (mod / "fonts").is_dir():
@@ -602,6 +693,8 @@ def prepare(engine: Path, mod: Path) -> dict[str, object]:
     patch_html5_platform_features(engine)
     patch_html5_animate_io(engine)
     patch_html5_engine_source(engine)
+    patch_html5_week_loading(engine)
+    patch_html5_menu_guards(engine)
     patch_note_types(engine)
     patch_stage_registration(engine)
     stage_file = engine / "source" / "states" / "stages" / "South.hx"
@@ -627,6 +720,9 @@ def prepare(engine: Path, mod: Path) -> dict[str, object]:
         "song": SONG,
         "week": WEEK,
         "chart": CHART,
+        "menuModes": {"storyMode": True, "freeplay": True},
+        "weekVisible": {"storyMode": not week_data["hideStoryMode"], "freeplay": not week_data["hideFreeplay"]},
+        "availableDifficulties": ["Hard"],
         "songSections": len(song_data.get("notes", [])),
         "noteCount": sum(len(section.get("sectionNotes", [])) for section in song_data.get("notes", []) if isinstance(section, dict)),
         "events": dict(event_counts),
