@@ -342,15 +342,25 @@ def patch_html5_platform_features(engine: Path) -> None:
         project = project.replace(old_define, new_define, 1)
 
     # The supplied mod stores its instrumental and sound effects as OGG.
-    # Include OGG files in the two web libraries; Paths.returnSound will still
-    # prefer MP3 when present and fall back to OGG for the mod's audio.
-    ogg_exclude = 'exclude="*.ogg" if="web"'
-    if ogg_exclude in project:
-        if project.count(ogg_exclude) != 2:
-            raise RuntimeError("Expected exactly two web OGG exclusions in Project.xml.")
-        project = project.replace(ogg_exclude, 'if="web"')
-    elif project.count('if="web"') < 2:
-        raise RuntimeError("Cannot verify that both web asset libraries include OGG audio.")
+    # Include OGG files only in the shared and songs web libraries. Keep the
+    # exclusions for week_assets and optional secrets unchanged.
+    audio_asset_rules = (
+        (
+            '<assets path="assets/shared"        exclude="*.ogg" if="web"/>',
+            '<assets path="assets/shared"        if="web"/>',
+        ),
+        (
+            '<assets path="assets/songs"         library="songs"         exclude="*.ogg" if="web"/>',
+            '<assets path="assets/songs"         library="songs"         if="web"/>',
+        ),
+    )
+    for original_rule, web_rule in audio_asset_rules:
+        if original_rule in project:
+            if project.count(original_rule) != 1:
+                raise RuntimeError(f"Expected one asset rule: {original_rule}")
+            project = project.replace(original_rule, web_rule, 1)
+        elif web_rule not in project:
+            raise RuntimeError(f"Could not locate an expected shared/songs web asset rule: {original_rule}")
 
     if project != project_file.read_text(encoding="utf-8"):
         project_file.write_text(project, encoding="utf-8")
