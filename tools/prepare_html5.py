@@ -730,6 +730,72 @@ def patch_html5_menu_guards(engine: Path) -> None:
         menu_file.write_text(menu_source, encoding="utf-8")
 
 
+
+def patch_html5_menu_artwork(engine: Path) -> None:
+    """Use the four custom repository artworks across the browser menus."""
+    main_file = engine / "source" / "states" / "MainMenuState.hx"
+    main = main_file.read_text(encoding="utf-8")
+
+    replacements = (
+        (
+            "magenta = new FlxSprite(-80).loadGraphic(Paths.image('menuDesat'));",
+            "magenta = new FlxSprite(-80).loadGraphic(Paths.image('menuMagenta'));",
+        ),
+        ("magenta.color = 0xFFfd719b;", "magenta.color = 0xFFFFFFFF;"),
+        (
+            "bg.setGraphicSize(Std.int(bg.width * 1.175));",
+            "bg.setGraphicSize(Std.int(bg.width * Math.max(FlxG.width / bg.width, FlxG.height / bg.height)));",
+        ),
+        (
+            "magenta.setGraphicSize(Std.int(magenta.width * 1.175));",
+            "magenta.setGraphicSize(Std.int(magenta.width * Math.max(FlxG.width / magenta.width, FlxG.height / magenta.height)));",
+        ),
+    )
+    for original, updated in replacements:
+        if updated not in main:
+            if main.count(original) != 1:
+                raise RuntimeError(f"Cannot uniquely locate MainMenuState artwork line: {original}")
+            main = main.replace(original, updated, 1)
+    main_file.write_text(main, encoding="utf-8")
+
+    freeplay_file = engine / "source" / "states" / "FreeplayState.hx"
+    freeplay = freeplay_file.read_text(encoding="utf-8")
+    freeplay_old = """\t\tbg = new FlxSprite().loadGraphic(Paths.image('menuDesat'));
+\t\tbg.antialiasing = ClientPrefs.data.antialiasing;
+\t\tadd(bg);
+\t\tbg.screenCenter();"""
+    freeplay_new = """\t\tbg = new FlxSprite().loadGraphic(Paths.image('menuDesat'));
+\t\tbg.antialiasing = ClientPrefs.data.antialiasing;
+\t\tvar bgScale:Float = Math.max(FlxG.width / bg.width, FlxG.height / bg.height);
+\t\tbg.setGraphicSize(Std.int(bg.width * bgScale));
+\t\tbg.updateHitbox();
+\t\tadd(bg);
+\t\tbg.screenCenter();"""
+    if freeplay_new not in freeplay:
+        if freeplay.count(freeplay_old) != 1:
+            raise RuntimeError("Cannot locate FreeplayState's custom background setup.")
+        freeplay = freeplay.replace(freeplay_old, freeplay_new, 1)
+    freeplay_file.write_text(freeplay, encoding="utf-8")
+
+    story_file = engine / "source" / "states" / "StoryMenuState.hx"
+    story = story_file.read_text(encoding="utf-8")
+    story_old = """\t\t} else {
+\t\t\tbgSprite.loadGraphic(Paths.image('menubackgrounds/menu_' + assetName));
+\t\t}"""
+    story_new = """\t\t} else {
+\t\t\tbgSprite.loadGraphic(Paths.image('menubackgrounds/menu_' + assetName));
+\t\t\tvar bgScale:Float = Math.max(FlxG.width / bgSprite.width, FlxG.height / bgSprite.height);
+\t\t\tbgSprite.setGraphicSize(Std.int(bgSprite.width * bgScale));
+\t\t\tbgSprite.updateHitbox();
+\t\t\tbgSprite.screenCenter();
+\t\t}"""
+    if story_new not in story:
+        if story.count(story_old) != 1:
+            raise RuntimeError("Cannot locate StoryMenuState's week-background setup.")
+        story = story.replace(story_old, story_new, 1)
+    story_file.write_text(story, encoding="utf-8")
+
+
 def patch_note_types(engine: Path) -> None:
     note_file = engine / "source" / "objects" / "Note.hx"
     source = note_file.read_text(encoding="utf-8")
@@ -765,6 +831,21 @@ def prepare(engine: Path, mod: Path) -> dict[str, object]:
 
     # Embed mod resources into asset folders already included by Project.xml.
     copy_tree(mod / "images", shared / "images", ignore_duplicate_nested_images)
+
+    # The custom artwork is committed at the repository root. Copy it after the
+    # mod package so these four user-supplied menu images are the active versions.
+    custom_art = {
+        "menu.png": shared / "images" / "menuBG.png",
+        "menublue.png": shared / "images" / "menubackgrounds" / "menu_LC.png",
+        "menudesat.png": shared / "images" / "menuDesat.png",
+        "menumagenta.png": shared / "images" / "menuMagenta.png",
+    }
+    for source_name, destination in custom_art.items():
+        source_image = engine.parent / source_name
+        if not source_image.is_file():
+            raise FileNotFoundError(f"Missing custom menu artwork in repository root: {source_image}")
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source_image, destination)
     copy_tree(mod / "characters", shared / "characters")
     copy_tree(mod / "data" / SONG, shared / "data" / SONG)
 
@@ -864,6 +945,7 @@ def prepare(engine: Path, mod: Path) -> dict[str, object]:
     patch_html5_engine_source(engine)
     patch_html5_week_loading(engine)
     patch_html5_menu_guards(engine)
+    patch_html5_menu_artwork(engine)
     patch_note_types(engine)
     patch_stage_registration(engine)
     stage_file = engine / "source" / "states" / "stages" / "South.hx"
@@ -894,6 +976,7 @@ def prepare(engine: Path, mod: Path) -> dict[str, object]:
         "availableDifficulties": ["Hard"],
         "storyMenuCard": f"images/storymenu/{WEEK}.png",
         "storyMenuBackground": week_data["weekBackground"],
+        "customMenuArtwork": ["menu.png", "menublue.png", "menudesat.png", "menumagenta.png"],
         "songSections": len(song_data.get("notes", [])),
         "noteCount": sum(len(section.get("sectionNotes", [])) for section in song_data.get("notes", []) if isinstance(section, dict)),
         "events": dict(event_counts),
