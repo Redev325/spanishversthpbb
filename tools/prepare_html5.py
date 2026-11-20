@@ -653,6 +653,51 @@ def patch_html5_menu_guards(engine: Path) -> None:
         freeplay_file.write_text(freeplay, encoding="utf-8")
 
 
+    # The upstream menu implementations assume weekBefore is always a string.
+    # Some mod week files deserialize an omitted/null value as null, which makes
+    # weekBefore.length throw in HTML5. Treat a null/empty prerequisite as no
+    # prerequisite, and skip an unexpectedly missing week instead of crashing.
+    lock_patches = (
+        (
+            "StoryMenuState.hx",
+            """\tfunction weekIsLocked(name:String):Bool {
+\t\tvar leWeek:WeekData = WeekData.weeksLoaded.get(name);
+\t\treturn (!leWeek.startUnlocked && leWeek.weekBefore.length > 0 && (!weekCompleted.exists(leWeek.weekBefore) || !weekCompleted.get(leWeek.weekBefore)));
+\t}""",
+            """\tfunction weekIsLocked(name:String):Bool {
+\t\tvar leWeek:WeekData = WeekData.weeksLoaded.get(name);
+\t\tif (leWeek == null) return true;
+\t\tvar weekBefore:String = leWeek.weekBefore;
+\t\tif (leWeek.startUnlocked || weekBefore == null || weekBefore.length == 0) return false;
+\t\treturn (!weekCompleted.exists(weekBefore) || !weekCompleted.get(weekBefore));
+\t}""",
+        ),
+        (
+            "FreeplayState.hx",
+            """\tfunction weekIsLocked(name:String):Bool {
+\t\tvar leWeek:WeekData = WeekData.weeksLoaded.get(name);
+\t\treturn (!leWeek.startUnlocked && leWeek.weekBefore.length > 0 && (!StoryMenuState.weekCompleted.exists(leWeek.weekBefore) || !StoryMenuState.weekCompleted.get(leWeek.weekBefore)));
+\t}""",
+            """\tfunction weekIsLocked(name:String):Bool {
+\t\tvar leWeek:WeekData = WeekData.weeksLoaded.get(name);
+\t\tif (leWeek == null) return true;
+\t\tvar weekBefore:String = leWeek.weekBefore;
+\t\tif (leWeek.startUnlocked || weekBefore == null || weekBefore.length == 0) return false;
+\t\treturn (!StoryMenuState.weekCompleted.exists(weekBefore) || !StoryMenuState.weekCompleted.get(weekBefore));
+\t}""",
+        ),
+    )
+    for filename, original_lock, safe_lock in lock_patches:
+        menu_file = engine / "source" / "states" / filename
+        menu_source = menu_file.read_text(encoding="utf-8")
+        if "weekBefore == null || weekBefore.length == 0" in menu_source:
+            continue
+        if menu_source.count(original_lock) != 1:
+            raise RuntimeError(f"Cannot locate the unique weekIsLocked() implementation in {filename}.")
+        menu_source = menu_source.replace(original_lock, safe_lock, 1)
+        menu_file.write_text(menu_source, encoding="utf-8")
+
+
 def patch_note_types(engine: Path) -> None:
     note_file = engine / "source" / "objects" / "Note.hx"
     source = note_file.read_text(encoding="utf-8")
