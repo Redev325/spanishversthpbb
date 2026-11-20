@@ -659,8 +659,9 @@ def patch_html5_menu_guards(engine: Path) -> None:
 
     freeplay_file = engine / "source" / "states" / "FreeplayState.hx"
     freeplay = freeplay_file.read_text(encoding="utf-8")
-    week_entry = "\\t\\t\\tvar leWeek:WeekData = WeekData.weeksLoaded.get(WeekData.weeksList[i]);"
-    safe_week_entry = """\\t\\t\\tvar leWeek:WeekData = WeekData.weeksLoaded.get(WeekData.weeksList[i]);\n\\t\\t\\tif (leWeek == null || leWeek.songs == null) continue;"""
+    week_entry = "\t\t\tvar leWeek:WeekData = WeekData.weeksLoaded.get(WeekData.weeksList[i]);"
+    safe_week_entry = """\t\t\tvar leWeek:WeekData = WeekData.weeksLoaded.get(WeekData.weeksList[i]);
+\t\t\tif (leWeek == null || leWeek.songs == null) continue;"""
     if "if (leWeek == null || leWeek.songs == null) continue;" not in freeplay:
         if freeplay.count(week_entry) != 1:
             raise RuntimeError("Cannot locate FreeplayState's week metadata lookup.")
