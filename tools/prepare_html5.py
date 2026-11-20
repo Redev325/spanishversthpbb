@@ -597,12 +597,12 @@ def patch_html5_week_loading(engine: Path) -> None:
     """Register the embedded week and guarantee valid LC metadata on HTML5."""
     week_file = engine / "source" / "backend" / "WeekData.hx"
     source = week_file.read_text(encoding="utf-8")
-    original = "\\t\\tvar sexList:Array<String> = CoolUtil.coolTextFile(Paths.getSharedPath('weeks/weekList.txt'));"
-    replacement = """\\t\\t#if html5
-\\t\\tvar sexList:Array<String> = ["LC"];
-\\t\\t#else
-\\t\\tvar sexList:Array<String> = CoolUtil.coolTextFile(Paths.getSharedPath('weeks/weekList.txt'));
-\\t\\t#end"""
+    original = "\t\tvar sexList:Array<String> = CoolUtil.coolTextFile(Paths.getSharedPath('weeks/weekList.txt'));"
+    replacement = """\t\t#if html5
+\t\tvar sexList:Array<String> = ["LC"];
+\t\t#else
+\t\tvar sexList:Array<String> = CoolUtil.coolTextFile(Paths.getSharedPath('weeks/weekList.txt'));
+\t\t#end"""
     if 'var sexList:Array<String> = ["LC"];' not in source:
         if source.count(original) != 1:
             raise RuntimeError("Cannot locate the Psych Engine week-list load statement.")
@@ -612,23 +612,23 @@ def patch_html5_week_loading(engine: Path) -> None:
     # fields even though the preparation step normalizes the JSON. Keep the
     # browser menu data valid at the engine boundary, and provide the one real
     # chart entry if songs is absent so Freeplay remains playable.
-    constructor_marker = "\\t\\tthis.fileName = fileName;"
-    constructor_replacement = """\\t\\tthis.fileName = fileName;
-\\t\\t#if html5
-\\t\\t// HTML5 Bloodbath LC week defaults: never leave menu arrays null.
-\\t\\tif (fileName == "LC")
-\\t\\t{
-\\t\\t\\tif (songs == null || songs.length == 0)
-\\t\\t\\t\\tsongs = [["Bloodbath Spanish Mix", "bf", [146, 113, 253]]];
-\\t\\t\\tif (weekBefore == null) weekBefore = "";
-\\t\\t\\tif (weekCharacters == null || weekCharacters.length < 3)
-\\t\\t\\t\\tweekCharacters = ["dad", "bf", "gf"];
-\\t\\t\\tif (weekName == null || weekName.length == 0) weekName = "Bloodbath Spanish Mix";
-\\t\\t\\tif (storyName == null || storyName.length == 0) storyName = "Bloodbath Spanish Mix";
-\\t\\t\\tif (freeplayColor == null || freeplayColor.length < 3) freeplayColor = [146, 113, 253];
-\\t\\t\\tif (weekBackground == null) weekBackground = "LC";
-\\t\\t}
-\\t\\t#end"""
+    constructor_marker = "\t\tthis.fileName = fileName;"
+    constructor_replacement = """\t\tthis.fileName = fileName;
+\t\t#if html5
+\t\t// HTML5 Bloodbath LC week defaults: never leave menu arrays null.
+\t\tif (fileName == "LC")
+\t\t{
+\t\t\tif (songs == null || songs.length == 0)
+\t\t\t\tsongs = [["Bloodbath Spanish Mix", "bf", [146, 113, 253]]];
+\t\t\tif (weekBefore == null) weekBefore = "";
+\t\t\tif (weekCharacters == null || weekCharacters.length < 3)
+\t\t\t\tweekCharacters = ["dad", "bf", "gf"];
+\t\t\tif (weekName == null || weekName.length == 0) weekName = "Bloodbath Spanish Mix";
+\t\t\tif (storyName == null || storyName.length == 0) storyName = "Bloodbath Spanish Mix";
+\t\t\tif (freeplayColor == null || freeplayColor.length < 3) freeplayColor = [146, 113, 253];
+\t\t\tif (weekBackground == null) weekBackground = "LC";
+\t\t}
+\t\t#end"""
     if "HTML5 Bloodbath LC week defaults" not in source:
         if source.count(constructor_marker) != 1:
             raise RuntimeError("Cannot locate the unique WeekData constructor assignment.")
