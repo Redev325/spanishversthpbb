@@ -787,7 +787,8 @@ def patch_html5_menu_artwork(engine: Path) -> None:
 \t\t\tvar bgScale:Float = Math.max(FlxG.width / bgSprite.width, FlxG.height / bgSprite.height);
 \t\t\tbgSprite.setGraphicSize(Std.int(bgSprite.width * bgScale));
 \t\t\tbgSprite.updateHitbox();
-\t\t\tbgSprite.screenCenter();
+\t\t\tbgSprite.screenCenter(X);
+			bgSprite.y = 56;
 \t\t}"""
     if story_new not in story:
         if story.count(story_old) != 1:
